@@ -2,6 +2,7 @@ poketyp-cloudflare-upload/
 poketyp-cloudflare-upload.zip
 _gitdata/
 .git/
+dist/
 
 .DS_Store
 Thumbs.db
