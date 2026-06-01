@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#197d7a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Typen-Trainer" />
+    <title>Pokémon Typen-Trainer</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Gen 6+ Typentabelle</p>
+          <h1>Pokémon Typen-Trainer</h1>
+        </div>
+        <div class="header-actions">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">
+            <span class="theme-icon sun-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+              </svg>
+            </span>
+            <span class="toggle-track" aria-hidden="true">
+              <span class="toggle-thumb"></span>
+            </span>
+            <span class="theme-icon moon-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img">
+                <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5A7 7 0 1 0 20.5 14.5Z"></path>
+              </svg>
+            </span>
+          </button>
+          <div class="score-pill" aria-live="polite">
+            <span id="scoreCorrect">0</span>/<span id="scoreTotal">0</span>
+            <small>Quiz</small>
+          </div>
+        </div>
+      </header>
+
+      <section class="type-orbit" aria-label="Typenübersicht" id="typeOrbit"></section>
+
+      <nav class="tabs" aria-label="Ansichten">
+        <button class="tab active" data-view="calculator">Kampf</button>
+        <button class="tab" data-view="defense">Verteidigung</button>
+        <button class="tab" data-view="quiz">Quiz</button>
+        <button class="tab" data-view="matrix">Tabelle</button>
+      </nav>
+
+      <section class="view active" id="calculatorView">
+        <div class="tool-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Angriff prüfen</h2>
+              <span class="panel-tag">Attacke → Ziel</span>
+            </div>
+            <div class="form-grid">
+              <label>
+                Angriffstyp
+                <select id="attackType"></select>
+              </label>
+              <label>
+                Verteidiger Typ 1
+                <select id="defenseTypeOne"></select>
+              </label>
+              <label>
+                Verteidiger Typ 2
+                <select id="defenseTypeTwo"></select>
+              </label>
+            </div>
+          </article>
+
+          <article class="result-card" id="attackResult">
+            <p class="result-kicker">Schaden</p>
+            <div class="result-multiplier" id="attackMultiplier">x1</div>
+            <p class="result-title" id="attackTitle">Normal effektiv</p>
+            <div class="calculation-line" id="attackBreakdown"></div>
+            <div class="pokemon-example" id="attackPokemonExample" hidden></div>
+            <div class="explanation-box" id="attackExplanation"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="defenseView">
+        <div class="tool-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <h2>Eigene Typen</h2>
+              <span class="panel-tag">Was trifft mich?</span>
+            </div>
+            <div class="form-grid">
+              <label>
+                Typ 1
+                <select id="ownTypeOne"></select>
+              </label>
+              <label>
+                Typ 2
+                <select id="ownTypeTwo"></select>
+              </label>
+            </div>
+          </article>
+
+          <article class="panel defense-summary">
+            <div class="panel-head">
+              <h2>Defensivprofil</h2>
+              <span class="panel-tag" id="defenseName">Normal</span>
+            </div>
+            <div class="matchup-columns">
+              <div>
+                <h3>Schwächen</h3>
+                <div class="chip-list" id="weaknessList"></div>
+              </div>
+              <div>
+                <h3>Resistenzen</h3>
+                <div class="chip-list" id="resistanceList"></div>
+              </div>
+              <div>
+                <h3>Immunitäten</h3>
+                <div class="chip-list" id="immunityList"></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="quizView">
+        <article class="quiz-card">
+          <div class="panel-head">
+            <h2>Quiz</h2>
+            <button class="icon-button" id="newQuestionButton" title="Neue Frage" aria-label="Neue Frage">↻</button>
+          </div>
+          <div class="quiz-mode-bar" aria-label="Quizmodus">
+            <button class="mode-button active" type="button" data-quiz-mode="practice">Übung</button>
+            <button class="mode-button" type="button" data-quiz-mode="all">50 Fragen</button>
+            <span class="quiz-progress" id="quizProgress">Übungsmodus</span>
+          </div>
+          <p class="quiz-question" id="quizQuestion"></p>
+          <div class="quiz-target" id="quizTarget"></div>
+          <div class="pokemon-example quiz-pokemon" id="quizPokemonExample" hidden></div>
+          <div class="answer-grid" id="answerGrid"></div>
+          <p class="quiz-feedback" id="quizFeedback" aria-live="polite"></p>
+          <div class="quiz-actions">
+            <button class="next-button" id="nextQuestionButton" type="button" hidden>Weiter</button>
+          </div>
+          <div class="explanation-box quiz-explanation" id="quizExplanation" hidden></div>
+          <section class="quiz-summary" id="quizSummary" hidden>
+            <div class="summary-head">
+              <div>
+                <p class="result-kicker">Auswertung</p>
+                <h3 id="summaryScore">0 von 0 richtig</h3>
+              </div>
+              <button class="next-button" id="restartAllButton" type="button">Nochmal</button>
+            </div>
+            <div class="summary-grid">
+              <div>
+                <h3>Problem-Angriffe</h3>
+                <div class="chip-list" id="problemAttackList"></div>
+              </div>
+              <div>
+                <h3>Problem-Ziele</h3>
+                <div class="chip-list" id="problemDefenseList"></div>
+              </div>
+              <div>
+                <h3>Falsche Faktoren</h3>
+                <div class="chip-list" id="problemMultiplierList"></div>
+              </div>
+            </div>
+            <div class="wrong-list" id="wrongAnswerList"></div>
+          </section>
+        </article>
+      </section>
+
+      <section class="view" id="matrixView">
+        <article class="panel matrix-panel">
+          <div class="panel-head">
+            <h2>Typentabelle</h2>
+            <span class="panel-tag">Angriff links, Verteidigung oben</span>
+          </div>
+          <div class="matrix-scroll">
+            <table class="type-matrix" id="typeMatrix"></table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
