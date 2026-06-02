@@ -739,39 +739,59 @@ button:focus-visible {
 }
 
 .type-matrix {
-  width: 100%;
-  min-width: 920px;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 0.78rem;
 }
 
 .type-matrix th,
 .type-matrix td {
-  width: 48px;
+  min-width: 78px;
   height: 42px;
+  padding: 0 8px;
   border: 1px solid var(--matrix-border);
   text-align: center;
 }
 
-.type-matrix th {
+.type-matrix thead th {
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--matrix-head);
   color: var(--muted);
   font-weight: 900;
+  white-space: nowrap;
 }
 
-.type-matrix th:first-child {
+.type-matrix thead th:first-child {
   left: 0;
   z-index: 3;
 }
 
-.type-matrix td:first-child {
+.type-matrix tbody th {
   position: sticky;
   left: 0;
+  z-index: 1;
+  min-width: 98px;
   background: var(--matrix-sticky);
+  color: var(--ink);
   font-weight: 900;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.matrix-corner {
+  min-width: 98px;
+  text-align: left;
+}
+
+.creator-credit {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 850;
+  text-align: center;
 }
 
 .cell-0 {

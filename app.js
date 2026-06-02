@@ -1060,14 +1060,14 @@ function finishAllMode() {
 
 function renderMatrix() {
   const table = $("#typeMatrix");
-  const head = `<thead><tr><th>Atk</th>${TYPES.map((type) => `<th>${type.name.slice(0, 3)}</th>`).join("")}</tr></thead>`;
+  const head = `<thead><tr><th scope="col" class="matrix-corner">Angriff</th>${TYPES.map((type) => `<th scope="col">${type.name}</th>`).join("")}</tr></thead>`;
   const body = TYPES.map((attackType) => {
     const cells = TYPES.map((defenseType) => {
       const value = baseEffectiveness(attackType.id, defenseType.id);
       const className = `cell-${String(value).replace(".", "")}`;
       return `<td class="${className}">${value === 1 ? "" : formatMultiplier(value)}</td>`;
     }).join("");
-    return `<tr><td>${attackType.name.slice(0, 3)}</td>${cells}</tr>`;
+    return `<tr><th scope="row">${attackType.name}</th>${cells}</tr>`;
   }).join("");
   table.innerHTML = `${head}<tbody>${body}</tbody>`;
 }
