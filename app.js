@@ -127,6 +127,25 @@ const targetModeLabels = {
   double: "Doppeltyp",
 };
 
+const pokeApiBase = "https://pokeapi.co/api/v2";
+const pokemonCache = new Map();
+const moveCache = new Map();
+let pokemonListPromise = null;
+let simulatorState = {
+  attacker: null,
+  defender: null,
+  move: null,
+};
+
+const statLabels = {
+  hp: "KP",
+  attack: "Angriff",
+  defense: "Vert.",
+  "special-attack": "Sp.-Ang.",
+  "special-defense": "Sp.-Vert.",
+  speed: "Init.",
+};
+
 function typeName(typeId) {
   return typeById[typeId]?.name ?? "Kein Typ";
 }
@@ -1099,6 +1118,417 @@ function renderMatrix() {
   table.innerHTML = `${columns}${head}<tbody>${body}</tbody>`;
 }
 
+function prettyApiName(name) {
+  return name
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeApiName(value) {
+  return value.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+async function fetchJson(url) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function setSimulatorStatus(message) {
+  $("#simStatus").textContent = message;
+}
+
+function loadPokemonList() {
+  if (!pokemonListPromise) {
+    pokemonListPromise = fetchJson(`${pokeApiBase}/pokemon?limit=20000`).then((data) => data.results);
+  }
+  return pokemonListPromise;
+}
+
+async function populatePokemonList() {
+  const list = await loadPokemonList();
+  const dataList = $("#pokemonList");
+  dataList.innerHTML = "";
+  list.forEach((pokemon) => {
+    const option = document.createElement("option");
+    option.value = pokemon.name;
+    option.label = prettyApiName(pokemon.name);
+    dataList.append(option);
+  });
+}
+
+function normalizePokemon(data) {
+  const stats = Object.fromEntries(data.stats.map((entry) => [entry.stat.name, entry.base_stat]));
+  const types = data.types.sort((a, b) => a.slot - b.slot).map((entry) => entry.type.name);
+  const sprite =
+    data.sprites?.other?.["official-artwork"]?.front_default ||
+    data.sprites?.other?.home?.front_default ||
+    data.sprites?.front_default ||
+    "";
+
+  return {
+    id: data.id,
+    name: data.name,
+    displayName: prettyApiName(data.name),
+    stats,
+    types,
+    sprite,
+    moves: data.moves.map((entry) => entry.move.name).sort((a, b) => prettyApiName(a).localeCompare(prettyApiName(b), "de")),
+  };
+}
+
+async function loadPokemon(value) {
+  const name = normalizeApiName(value);
+  if (!name) return null;
+  if (pokemonCache.has(name)) return pokemonCache.get(name);
+  const pokemon = normalizePokemon(await fetchJson(`${pokeApiBase}/pokemon/${name}`));
+  pokemonCache.set(name, pokemon);
+  pokemonCache.set(String(pokemon.id), pokemon);
+  return pokemon;
+}
+
+function localizedMoveName(data) {
+  return data.names?.find((entry) => entry.language.name === "de")?.name || prettyApiName(data.name);
+}
+
+function normalizeMove(data) {
+  return {
+    id: data.id,
+    name: data.name,
+    displayName: localizedMoveName(data),
+    type: data.type.name,
+    power: data.power ?? 0,
+    accuracy: data.accuracy,
+    pp: data.pp,
+    damageClass: data.damage_class.name,
+  };
+}
+
+async function loadMove(name) {
+  if (!name) return null;
+  if (moveCache.has(name)) return moveCache.get(name);
+  const move = normalizeMove(await fetchJson(`${pokeApiBase}/move/${name}`));
+  moveCache.set(name, move);
+  return move;
+}
+
+function initializeStageSelect(select, defaultValue = 0) {
+  select.innerHTML = "";
+  for (let stage = -6; stage <= 6; stage += 1) {
+    const option = document.createElement("option");
+    option.value = String(stage);
+    option.textContent = stage > 0 ? `+${stage}` : String(stage);
+    option.selected = stage === defaultValue;
+    select.append(option);
+  }
+}
+
+function stageMultiplier(stage) {
+  if (stage >= 0) return (2 + stage) / 2;
+  return 2 / (2 + Math.abs(stage));
+}
+
+function clampLevel() {
+  const value = Number($("#simLevelInput").value);
+  if (!Number.isFinite(value)) return 50;
+  return Math.max(1, Math.min(100, Math.round(value)));
+}
+
+function calculatedStat(base, level, isHp = false) {
+  const iv = 31;
+  const ev = 0;
+  if (isHp) return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + level + 10;
+  return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + 5;
+}
+
+function weatherModifier(moveType) {
+  const weather = $("#simWeatherSelect").value;
+  if (weather === "sun" && moveType === "fire") return 1.5;
+  if (weather === "sun" && moveType === "water") return 0.5;
+  if (weather === "rain" && moveType === "water") return 1.5;
+  if (weather === "rain" && moveType === "fire") return 0.5;
+  return 1;
+}
+
+function damageClassLabel(damageClass) {
+  if (damageClass === "physical") return "Physisch";
+  if (damageClass === "special") return "Speziell";
+  return "Status";
+}
+
+function statusTextForHits(minDamage, maxDamage, hp) {
+  if (maxDamage <= 0) return "Kein Schaden";
+  if (minDamage >= hp) return "Sicherer OHKO";
+  if (maxDamage >= hp) return "Möglicher OHKO";
+  if (minDamage * 2 >= hp) return "Sicherer 2HKO";
+  if (maxDamage * 2 >= hp) return "Möglicher 2HKO";
+  if (minDamage * 3 >= hp) return "Sicherer 3HKO";
+  if (maxDamage * 3 >= hp) return "Möglicher 3HKO";
+  return "Chip-Schaden";
+}
+
+function clearSimulatorResult(message = "Wähle Angreifer, Attacke und Ziel.") {
+  $("#simDamageRange").textContent = "--";
+  $("#simDamageTitle").textContent = message;
+  $("#simDamageChips").innerHTML = "";
+  $("#simDamageBreakdown").innerHTML = "";
+}
+
+function appendBreakdownRow(container, label, value) {
+  const row = document.createElement("div");
+  row.className = "explanation-row";
+  row.append(labelChip(label), document.createTextNode(value));
+  container.append(row);
+}
+
+function renderSimulatorPokemonCard(container, pokemon, label) {
+  container.innerHTML = "";
+  if (!pokemon) return;
+
+  const art = document.createElement("div");
+  art.className = "sim-pokemon-art";
+  if (pokemon.sprite) {
+    const image = document.createElement("img");
+    image.src = pokemon.sprite;
+    image.alt = pokemon.displayName;
+    art.append(image);
+  } else {
+    art.textContent = "?";
+  }
+
+  const copy = document.createElement("div");
+  copy.className = "sim-pokemon-copy";
+  const kicker = document.createElement("p");
+  kicker.className = "pokemon-kicker";
+  kicker.textContent = label;
+  const name = document.createElement("p");
+  name.className = "sim-pokemon-name";
+  name.textContent = pokemon.displayName;
+  const types = document.createElement("div");
+  types.className = "pokemon-types";
+  pokemon.types.forEach((type) => types.append(chip(type)));
+
+  const stats = document.createElement("div");
+  stats.className = "sim-stat-grid";
+  ["hp", "attack", "defense", "special-attack", "special-defense", "speed"].forEach((statName) => {
+    const stat = document.createElement("div");
+    stat.className = "sim-stat";
+    stat.innerHTML = `<strong>${pokemon.stats[statName]}</strong>${statLabels[statName]}`;
+    stats.append(stat);
+  });
+
+  copy.append(kicker, name, types, stats);
+  container.append(art, copy);
+}
+
+function populateMoveSelect(pokemon) {
+  const select = $("#simMoveSelect");
+  const current = select.value;
+  const preferred = ["thunderbolt", "flamethrower", "surf", "earthquake", "tackle"];
+  select.innerHTML = "";
+  pokemon.moves.forEach((moveName) => {
+    const option = document.createElement("option");
+    option.value = moveName;
+    option.textContent = prettyApiName(moveName);
+    select.append(option);
+  });
+  select.disabled = pokemon.moves.length === 0;
+
+  if (pokemon.moves.includes(current)) select.value = current;
+  else select.value = preferred.find((moveName) => pokemon.moves.includes(moveName)) || pokemon.moves[0] || "";
+}
+
+function renderDamageChips(result) {
+  const container = $("#simDamageChips");
+  container.innerHTML = "";
+  container.append(chip(result.move.type), labelChip(result.category));
+  container.append(labelChip("Typenwirkung", formatMultiplier(result.effectiveness)));
+  if (result.stab > 1) container.append(labelChip("STAB", "x1,5"));
+  if (result.critical > 1) container.append(labelChip("Krit", "x1,5"));
+  if (result.weather !== 1) container.append(labelChip("Wetter", formatMultiplier(result.weather)));
+  if (result.burn !== 1) container.append(labelChip("Verbrennung", "x0,5"));
+}
+
+function calculateSimulatorDamage() {
+  const { attacker, defender, move } = simulatorState;
+  if (!attacker || !defender || !move) return null;
+  if (move.damageClass === "status" || !move.power) {
+    return { statusOnly: true, move };
+  }
+
+  const level = clampLevel();
+  $("#simLevelInput").value = String(level);
+  const isSpecial = move.damageClass === "special";
+  const attackStatName = isSpecial ? "special-attack" : "attack";
+  const defenseStatName = isSpecial ? "special-defense" : "defense";
+  const isCritical = $("#simCriticalToggle").checked;
+  const isBurned = $("#simBurnToggle").checked;
+  const attackStage = Number($("#simAttackStage").value);
+  const defenseStage = Number($("#simDefenseStage").value);
+  const effectiveAttackStage = isCritical && attackStage < 0 ? 0 : attackStage;
+  const effectiveDefenseStage = isCritical && defenseStage > 0 ? 0 : defenseStage;
+  const attack = Math.max(
+    1,
+    Math.floor(calculatedStat(attacker.stats[attackStatName], level) * stageMultiplier(effectiveAttackStage)),
+  );
+  const defense = Math.max(
+    1,
+    Math.floor(calculatedStat(defender.stats[defenseStatName], level) * stageMultiplier(effectiveDefenseStage)),
+  );
+  const hp = calculatedStat(defender.stats.hp, level, true);
+  const baseDamage = Math.floor(Math.floor(((Math.floor((2 * level) / 5) + 2) * move.power * attack) / defense) / 50) + 2;
+  const effectiveness = totalEffectiveness(move.type, defender.types);
+  const stab = attacker.types.includes(move.type) ? 1.5 : 1;
+  const critical = isCritical ? 1.5 : 1;
+  const burn = isBurned && move.damageClass === "physical" ? 0.5 : 1;
+  const weather = weatherModifier(move.type);
+  const modifier = effectiveness * stab * critical * burn * weather;
+  const minDamage = Math.floor(baseDamage * modifier * 0.85);
+  const maxDamage = Math.floor(baseDamage * modifier);
+
+  return {
+    attack,
+    attackStatName,
+    baseDamage,
+    burn,
+    category: damageClassLabel(move.damageClass),
+    critical,
+    defense,
+    defenseStatName,
+    effectiveness,
+    hp,
+    level,
+    maxDamage,
+    minDamage,
+    move,
+    stab,
+    weather,
+  };
+}
+
+function updateSimulatorResult() {
+  const result = calculateSimulatorDamage();
+  if (!result) {
+    clearSimulatorResult();
+    return;
+  }
+
+  if (result.statusOnly) {
+    $("#simDamageRange").textContent = "0";
+    $("#simDamageTitle").textContent = `${result.move.displayName} macht keinen direkten Schaden.`;
+    $("#simDamageChips").innerHTML = "";
+    $("#simDamageChips").append(chip(result.move.type), labelChip("Status"));
+    $("#simDamageBreakdown").innerHTML = "";
+    appendBreakdownRow($("#simDamageBreakdown"), "Hinweis", "Status-Attacken verändern Werte, Wetter, Schutz oder andere Effekte. Dafür gibt es keine direkte Schadensrange.");
+    return;
+  }
+
+  const minPercent = ((result.minDamage / result.hp) * 100).toFixed(1).replace(".", ",");
+  const maxPercent = ((result.maxDamage / result.hp) * 100).toFixed(1).replace(".", ",");
+  $("#simDamageRange").textContent = `${result.minDamage}-${result.maxDamage}`;
+  $("#simDamageTitle").textContent = `${minPercent}-${maxPercent}% von ${simulatorState.defender.displayName} (${statusTextForHits(result.minDamage, result.maxDamage, result.hp)})`;
+  renderDamageChips(result);
+
+  const breakdown = $("#simDamageBreakdown");
+  breakdown.innerHTML = "";
+  appendBreakdownRow(breakdown, "Attacke", `${result.move.displayName}: ${result.move.power} Stärke, ${typeName(result.move.type)}, ${result.category}`);
+  appendBreakdownRow(breakdown, "Stats", `${statLabels[result.attackStatName]} ${result.attack} gegen ${statLabels[result.defenseStatName]} ${result.defense}; Ziel-KP ${result.hp}`);
+  appendBreakdownRow(breakdown, "Rechnung", `Basis ${result.baseDamage}, Zufallsrange x0,85 bis x1, Typenwirkung ${formatMultiplier(result.effectiveness)}${result.stab > 1 ? ", STAB x1,5" : ""}${result.critical > 1 ? ", Krit x1,5" : ""}.`);
+}
+
+async function loadSimulatorPokemon(role) {
+  const input = role === "attacker" ? $("#simAttackerInput") : $("#simDefenderInput");
+  const card = role === "attacker" ? $("#simAttackerCard") : $("#simDefenderCard");
+  const label = role === "attacker" ? "Angreifer" : "Ziel";
+  const value = input.value;
+  if (!value.trim()) return;
+
+  try {
+    setSimulatorStatus(`${label} wird geladen ...`);
+    const pokemon = await loadPokemon(value);
+    simulatorState[role] = pokemon;
+    input.value = pokemon.name;
+    renderSimulatorPokemonCard(card, pokemon, label);
+    if (role === "attacker") {
+      populateMoveSelect(pokemon);
+      await loadSimulatorMove();
+    }
+    updateSimulatorResult();
+    setSimulatorStatus("Bereit.");
+  } catch {
+    simulatorState[role] = null;
+    renderSimulatorPokemonCard(card, null, label);
+    clearSimulatorResult(`${label} konnte nicht geladen werden.`);
+    setSimulatorStatus("Pokémon nicht gefunden oder PokéAPI gerade nicht erreichbar.");
+  }
+}
+
+async function loadSimulatorMove() {
+  const select = $("#simMoveSelect");
+  if (!select.value) {
+    simulatorState.move = null;
+    updateSimulatorResult();
+    return;
+  }
+
+  try {
+    setSimulatorStatus("Attacke wird geladen ...");
+    simulatorState.move = await loadMove(select.value);
+    updateSimulatorResult();
+    setSimulatorStatus("Bereit.");
+  } catch {
+    simulatorState.move = null;
+    clearSimulatorResult("Attacke konnte nicht geladen werden.");
+    setSimulatorStatus("Attacke nicht gefunden oder PokéAPI gerade nicht erreichbar.");
+  }
+}
+
+function bindModuleTabs() {
+  document.querySelectorAll(".module-tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".module-tab").forEach((tab) => tab.classList.remove("active"));
+      document.querySelectorAll(".module-view").forEach((view) => view.classList.remove("active"));
+      button.classList.add("active");
+      $(`#${button.dataset.module}Module`).classList.add("active");
+    });
+  });
+}
+
+function bindSimulatorInputs() {
+  $("#simAttackerInput").addEventListener("change", () => loadSimulatorPokemon("attacker"));
+  $("#simDefenderInput").addEventListener("change", () => loadSimulatorPokemon("defender"));
+  $("#simMoveSelect").addEventListener("change", loadSimulatorMove);
+  [
+    "#simLevelInput",
+    "#simWeatherSelect",
+    "#simAttackStage",
+    "#simDefenseStage",
+    "#simCriticalToggle",
+    "#simBurnToggle",
+  ].forEach((selector) => {
+    $(selector).addEventListener("change", updateSimulatorResult);
+  });
+}
+
+async function initSimulator() {
+  initializeStageSelect($("#simAttackStage"));
+  initializeStageSelect($("#simDefenseStage"));
+  bindSimulatorInputs();
+  clearSimulatorResult();
+  populatePokemonList().catch(() => {
+    setSimulatorStatus("Pokémon-Liste konnte nicht geladen werden, direkte Namen wie pikachu gehen trotzdem.");
+  });
+  await Promise.all([loadSimulatorPokemon("attacker"), loadSimulatorPokemon("defender")]);
+}
+
 function bindTabs() {
   document.querySelectorAll(".tab").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1141,12 +1571,14 @@ function init() {
   populateSelect($("#ownTypeTwo"), { includeNone: true, selected: "flying" });
 
   renderOrbit();
+  bindModuleTabs();
   bindTabs();
   bindInputs();
   updateAttackResult();
   updateDefenseResult();
   renderQuestion();
   renderMatrix();
+  initSimulator();
 }
 
 function registerServiceWorker() {

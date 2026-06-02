@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <link rel="stylesheet" href="style.css?v=7" />
+    <link rel="stylesheet" href="style.css?v=8" />
   </head>
   <body>
     <main class="app-shell">
@@ -42,6 +42,13 @@
           </div>
         </div>
       </header>
+
+      <nav class="module-tabs" aria-label="Werkzeug auswählen">
+        <button class="module-tab active" type="button" data-module="types">Typen lernen</button>
+        <button class="module-tab" type="button" data-module="simulator">Attacken-Simulator</button>
+      </nav>
+
+      <section class="module-view active" id="typesModule">
 
       <section class="type-orbit" aria-label="Typenübersicht" id="typeOrbit"></section>
 
@@ -193,9 +200,83 @@
         </article>
       </section>
 
+      </section>
+
+      <section class="module-view" id="simulatorModule">
+        <div class="simulator-grid">
+          <article class="panel simulator-controls">
+            <div class="panel-head">
+              <h2>Attacken-Simulator</h2>
+              <span class="panel-tag">Schaden berechnen</span>
+            </div>
+            <datalist id="pokemonList"></datalist>
+            <div class="sim-form-grid">
+              <label>
+                Angreifer-Pokémon
+                <input id="simAttackerInput" list="pokemonList" autocomplete="off" value="pikachu" />
+              </label>
+              <label>
+                Ziel-Pokémon
+                <input id="simDefenderInput" list="pokemonList" autocomplete="off" value="charizard" />
+              </label>
+              <label>
+                Attacke
+                <select id="simMoveSelect" disabled>
+                  <option>Angreifer laden ...</option>
+                </select>
+              </label>
+              <label>
+                Level
+                <input id="simLevelInput" type="number" min="1" max="100" value="50" />
+              </label>
+              <label>
+                Wetter
+                <select id="simWeatherSelect">
+                  <option value="none">Normal</option>
+                  <option value="sun">Sonne</option>
+                  <option value="rain">Regen</option>
+                </select>
+              </label>
+              <label>
+                Angreifer-Boost
+                <select id="simAttackStage"></select>
+              </label>
+              <label>
+                Ziel-Boost
+                <select id="simDefenseStage"></select>
+              </label>
+            </div>
+            <div class="sim-toggle-row">
+              <label class="check-control">
+                <input id="simCriticalToggle" type="checkbox" />
+                Kritischer Treffer
+              </label>
+              <label class="check-control">
+                <input id="simBurnToggle" type="checkbox" />
+                Angreifer verbrannt
+              </label>
+            </div>
+            <p class="sim-status" id="simStatus" aria-live="polite">Pokémon-Daten werden geladen ...</p>
+          </article>
+
+          <article class="result-card simulator-result">
+            <p class="result-kicker">Schaden</p>
+            <div class="result-multiplier sim-damage-range" id="simDamageRange">--</div>
+            <p class="result-title" id="simDamageTitle">Wähle Angreifer, Attacke und Ziel.</p>
+            <div class="calculation-line" id="simDamageChips"></div>
+            <div class="explanation-box" id="simDamageBreakdown"></div>
+          </article>
+        </div>
+
+        <div class="sim-pokemon-grid">
+          <article class="panel sim-pokemon-card" id="simAttackerCard"></article>
+          <article class="panel sim-pokemon-card" id="simDefenderCard"></article>
+        </div>
+      </section>
+
       <footer class="creator-credit">Erstellt von Jan</footer>
     </main>
 
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
   </body>
 </html>
