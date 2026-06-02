@@ -129,7 +129,9 @@ const targetModeLabels = {
 
 const pokeApiBase = "https://pokeapi.co/api/v2";
 const pokemonCache = new Map();
+const speciesCache = new Map();
 const moveCache = new Map();
+const pokemonNameLookup = new Map();
 let pokemonListPromise = null;
 let simulatorState = {
   attacker: null,
@@ -416,8 +418,9 @@ function populateSelect(select, { includeNone = false, selected = null } = {}) {
 
 function chip(typeId, extraText = "") {
   const item = document.createElement("span");
+  const type = typeById[typeId];
   item.className = "mini-chip";
-  item.style.setProperty("--type-color", typeById[typeId].color);
+  item.style.setProperty("--type-color", type?.color ?? "#777");
   item.innerHTML = `${typeName(typeId)}${extraText ? `<span class="chip-value">${extraText}</span>` : ""}`;
   return item;
 }
@@ -1130,6 +1133,11 @@ function normalizeApiName(value) {
   return value.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
+function lookupPokemonApiName(value) {
+  const normalized = normalizeApiName(value);
+  return pokemonNameLookup.get(normalized) ?? normalized;
+}
+
 async function fetchJson(url) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 8000);
@@ -1163,9 +1171,40 @@ async function populatePokemonList() {
     option.label = prettyApiName(pokemon.name);
     dataList.append(option);
   });
+  pokemonCache.forEach((pokemon) => {
+    if (pokemon?.displayName) addGermanPokemonOption(pokemon);
+  });
 }
 
-function normalizePokemon(data) {
+function addGermanPokemonOption(pokemon) {
+  const dataList = $("#pokemonList");
+  if (!dataList || [...dataList.options].some((option) => option.value === pokemon.displayName)) return;
+  const option = document.createElement("option");
+  option.value = pokemon.displayName;
+  option.label = pokemon.name;
+  dataList.prepend(option);
+}
+
+function localizedPokemonName(species) {
+  return species.names?.find((entry) => entry.language.name === "de")?.name || prettyApiName(species.name);
+}
+
+async function loadSpecies(speciesReference) {
+  const name = typeof speciesReference === "string" ? speciesReference : speciesReference.name;
+  if (speciesCache.has(name)) return speciesCache.get(name);
+  const url = typeof speciesReference === "string" ? `${pokeApiBase}/pokemon-species/${name}` : speciesReference.url;
+  const species = await fetchJson(url);
+  speciesCache.set(name, species);
+  return species;
+}
+
+function rememberPokemonNames(pokemon) {
+  [pokemon.name, pokemon.displayName, String(pokemon.id)].forEach((name) => {
+    pokemonNameLookup.set(normalizeApiName(name), pokemon.name);
+  });
+}
+
+function normalizePokemon(data, species) {
   const stats = Object.fromEntries(data.stats.map((entry) => [entry.stat.name, entry.base_stat]));
   const types = data.types.sort((a, b) => a.slot - b.slot).map((entry) => entry.type.name);
   const sprite =
@@ -1177,7 +1216,7 @@ function normalizePokemon(data) {
   return {
     id: data.id,
     name: data.name,
-    displayName: prettyApiName(data.name),
+    displayName: localizedPokemonName(species),
     stats,
     types,
     sprite,
@@ -1186,12 +1225,17 @@ function normalizePokemon(data) {
 }
 
 async function loadPokemon(value) {
-  const name = normalizeApiName(value);
+  const name = lookupPokemonApiName(value);
   if (!name) return null;
   if (pokemonCache.has(name)) return pokemonCache.get(name);
-  const pokemon = normalizePokemon(await fetchJson(`${pokeApiBase}/pokemon/${name}`));
+  const data = await fetchJson(`${pokeApiBase}/pokemon/${name}`);
+  const species = await loadSpecies(data.species);
+  const pokemon = normalizePokemon(data, species);
   pokemonCache.set(name, pokemon);
+  pokemonCache.set(pokemon.name, pokemon);
   pokemonCache.set(String(pokemon.id), pokemon);
+  rememberPokemonNames(pokemon);
+  addGermanPokemonOption(pokemon);
   return pokemon;
 }
 
@@ -1236,8 +1280,24 @@ function stageMultiplier(stage) {
   return 2 / (2 + Math.abs(stage));
 }
 
-function clampLevel() {
-  const value = Number($("#simLevelInput").value);
+function clampLevel(selector) {
+  const input = $(selector);
+  const value = Number(input.value);
+  const level = Number.isFinite(value) ? Math.max(1, Math.min(100, Math.round(value))) : 50;
+  input.value = String(level);
+  return level;
+}
+
+function attackerLevel() {
+  return clampLevel("#simAttackerLevelInput");
+}
+
+function defenderLevel() {
+  return clampLevel("#simDefenderLevelInput");
+}
+
+function peekLevel(selector) {
+  const value = Number($(selector).value);
   if (!Number.isFinite(value)) return 50;
   return Math.max(1, Math.min(100, Math.round(value)));
 }
@@ -1289,9 +1349,15 @@ function appendBreakdownRow(container, label, value) {
   container.append(row);
 }
 
-function renderSimulatorPokemonCard(container, pokemon, label) {
+function renderSimulatorPokemonCard(container, pokemon, role) {
   container.innerHTML = "";
   if (!pokemon) return;
+  const label = role === "attacker" ? "Angreifer" : "Ziel";
+  const level = role === "attacker" ? peekLevel("#simAttackerLevelInput") : peekLevel("#simDefenderLevelInput");
+  const statOrder =
+    role === "attacker"
+      ? ["attack", "special-attack", "speed", "hp", "defense", "special-defense"]
+      : ["hp", "defense", "special-defense", "attack", "special-attack", "speed"];
 
   const art = document.createElement("div");
   art.className = "sim-pokemon-art";
@@ -1308,7 +1374,7 @@ function renderSimulatorPokemonCard(container, pokemon, label) {
   copy.className = "sim-pokemon-copy";
   const kicker = document.createElement("p");
   kicker.className = "pokemon-kicker";
-  kicker.textContent = label;
+  kicker.textContent = `${label} · Level ${level}`;
   const name = document.createElement("p");
   name.className = "sim-pokemon-name";
   name.textContent = pokemon.displayName;
@@ -1318,10 +1384,10 @@ function renderSimulatorPokemonCard(container, pokemon, label) {
 
   const stats = document.createElement("div");
   stats.className = "sim-stat-grid";
-  ["hp", "attack", "defense", "special-attack", "special-defense", "speed"].forEach((statName) => {
+  statOrder.forEach((statName) => {
     const stat = document.createElement("div");
     stat.className = "sim-stat";
-    stat.innerHTML = `<strong>${pokemon.stats[statName]}</strong>${statLabels[statName]}`;
+    stat.innerHTML = `<strong>${calculatedStat(pokemon.stats[statName], level, statName === "hp")}</strong>${statLabels[statName]}`;
     stats.append(stat);
   });
 
@@ -1329,21 +1395,44 @@ function renderSimulatorPokemonCard(container, pokemon, label) {
   container.append(art, copy);
 }
 
-function populateMoveSelect(pokemon) {
+function refreshSimulatorPokemonCards() {
+  renderSimulatorPokemonCard($("#simAttackerCard"), simulatorState.attacker, "attacker");
+  renderSimulatorPokemonCard($("#simDefenderCard"), simulatorState.defender, "defender");
+}
+
+async function populateMoveSelect(pokemon) {
   const select = $("#simMoveSelect");
   const current = select.value;
   const preferred = ["thunderbolt", "flamethrower", "surf", "earthquake", "tackle"];
+  select.disabled = true;
   select.innerHTML = "";
-  pokemon.moves.forEach((moveName) => {
+  const loading = document.createElement("option");
+  loading.textContent = "Attacken laden ...";
+  select.append(loading);
+
+  const moves = (
+    await Promise.all(
+      pokemon.moves.map((moveName) =>
+        loadMove(moveName).catch(() => null),
+      ),
+    )
+  )
+    .filter(Boolean)
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, "de"));
+
+  select.innerHTML = "";
+  moves.forEach((move) => {
     const option = document.createElement("option");
-    option.value = moveName;
-    option.textContent = prettyApiName(moveName);
+    option.value = move.name;
+    option.textContent = move.power
+      ? `${move.displayName} (${typeName(move.type)}, ${move.power})`
+      : `${move.displayName} (${typeName(move.type)}, Status)`;
     select.append(option);
   });
-  select.disabled = pokemon.moves.length === 0;
+  select.disabled = moves.length === 0;
 
-  if (pokemon.moves.includes(current)) select.value = current;
-  else select.value = preferred.find((moveName) => pokemon.moves.includes(moveName)) || pokemon.moves[0] || "";
+  if (moves.some((move) => move.name === current)) select.value = current;
+  else select.value = preferred.find((moveName) => moves.some((move) => move.name === moveName)) || moves[0]?.name || "";
 }
 
 function renderDamageChips(result) {
@@ -1364,8 +1453,8 @@ function calculateSimulatorDamage() {
     return { statusOnly: true, move };
   }
 
-  const level = clampLevel();
-  $("#simLevelInput").value = String(level);
+  const attackLevel = attackerLevel();
+  const targetLevel = defenderLevel();
   const isSpecial = move.damageClass === "special";
   const attackStatName = isSpecial ? "special-attack" : "attack";
   const defenseStatName = isSpecial ? "special-defense" : "defense";
@@ -1377,14 +1466,15 @@ function calculateSimulatorDamage() {
   const effectiveDefenseStage = isCritical && defenseStage > 0 ? 0 : defenseStage;
   const attack = Math.max(
     1,
-    Math.floor(calculatedStat(attacker.stats[attackStatName], level) * stageMultiplier(effectiveAttackStage)),
+    Math.floor(calculatedStat(attacker.stats[attackStatName], attackLevel) * stageMultiplier(effectiveAttackStage)),
   );
   const defense = Math.max(
     1,
-    Math.floor(calculatedStat(defender.stats[defenseStatName], level) * stageMultiplier(effectiveDefenseStage)),
+    Math.floor(calculatedStat(defender.stats[defenseStatName], targetLevel) * stageMultiplier(effectiveDefenseStage)),
   );
-  const hp = calculatedStat(defender.stats.hp, level, true);
-  const baseDamage = Math.floor(Math.floor(((Math.floor((2 * level) / 5) + 2) * move.power * attack) / defense) / 50) + 2;
+  const hp = calculatedStat(defender.stats.hp, targetLevel, true);
+  const baseDamage =
+    Math.floor(Math.floor(((Math.floor((2 * attackLevel) / 5) + 2) * move.power * attack) / defense) / 50) + 2;
   const effectiveness = totalEffectiveness(move.type, defender.types);
   const stab = attacker.types.includes(move.type) ? 1.5 : 1;
   const critical = isCritical ? 1.5 : 1;
@@ -1405,7 +1495,8 @@ function calculateSimulatorDamage() {
     defenseStatName,
     effectiveness,
     hp,
-    level,
+    attackLevel,
+    targetLevel,
     maxDamage,
     minDamage,
     move,
@@ -1415,6 +1506,7 @@ function calculateSimulatorDamage() {
 }
 
 function updateSimulatorResult() {
+  refreshSimulatorPokemonCards();
   const result = calculateSimulatorDamage();
   if (!result) {
     clearSimulatorResult();
@@ -1440,7 +1532,11 @@ function updateSimulatorResult() {
   const breakdown = $("#simDamageBreakdown");
   breakdown.innerHTML = "";
   appendBreakdownRow(breakdown, "Attacke", `${result.move.displayName}: ${result.move.power} Stärke, ${typeName(result.move.type)}, ${result.category}`);
-  appendBreakdownRow(breakdown, "Stats", `${statLabels[result.attackStatName]} ${result.attack} gegen ${statLabels[result.defenseStatName]} ${result.defense}; Ziel-KP ${result.hp}`);
+  appendBreakdownRow(
+    breakdown,
+    "Stats",
+    `Angreifer L${result.attackLevel}: ${statLabels[result.attackStatName]} ${result.attack}; Ziel L${result.targetLevel}: ${statLabels[result.defenseStatName]} ${result.defense}, KP ${result.hp}`,
+  );
   appendBreakdownRow(breakdown, "Rechnung", `Basis ${result.baseDamage}, Zufallsrange x0,85 bis x1, Typenwirkung ${formatMultiplier(result.effectiveness)}${result.stab > 1 ? ", STAB x1,5" : ""}${result.critical > 1 ? ", Krit x1,5" : ""}.`);
 }
 
@@ -1455,10 +1551,10 @@ async function loadSimulatorPokemon(role) {
     setSimulatorStatus(`${label} wird geladen ...`);
     const pokemon = await loadPokemon(value);
     simulatorState[role] = pokemon;
-    input.value = pokemon.name;
-    renderSimulatorPokemonCard(card, pokemon, label);
+    input.value = pokemon.displayName;
+    renderSimulatorPokemonCard(card, pokemon, role);
     if (role === "attacker") {
-      populateMoveSelect(pokemon);
+      await populateMoveSelect(pokemon);
       await loadSimulatorMove();
     }
     updateSimulatorResult();
@@ -1507,7 +1603,8 @@ function bindSimulatorInputs() {
   $("#simDefenderInput").addEventListener("change", () => loadSimulatorPokemon("defender"));
   $("#simMoveSelect").addEventListener("change", loadSimulatorMove);
   [
-    "#simLevelInput",
+    "#simAttackerLevelInput",
+    "#simDefenderLevelInput",
     "#simWeatherSelect",
     "#simAttackStage",
     "#simDefenseStage",

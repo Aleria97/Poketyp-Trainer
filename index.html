@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <link rel="stylesheet" href="style.css?v=8" />
+    <link rel="stylesheet" href="style.css?v=9" />
   </head>
   <body>
     <main class="app-shell">
@@ -203,21 +203,17 @@
       </section>
 
       <section class="module-view" id="simulatorModule">
-        <div class="simulator-grid">
-          <article class="panel simulator-controls">
+        <datalist id="pokemonList"></datalist>
+        <div class="simulator-layout">
+          <article class="panel sim-side-panel">
             <div class="panel-head">
-              <h2>Attacken-Simulator</h2>
-              <span class="panel-tag">Schaden berechnen</span>
+              <h2>Angreifer</h2>
+              <span class="panel-tag">Attacke</span>
             </div>
-            <datalist id="pokemonList"></datalist>
-            <div class="sim-form-grid">
+            <div class="sim-side-form">
               <label>
                 Angreifer-Pokémon
                 <input id="simAttackerInput" list="pokemonList" autocomplete="off" value="pikachu" />
-              </label>
-              <label>
-                Ziel-Pokémon
-                <input id="simDefenderInput" list="pokemonList" autocomplete="off" value="charizard" />
               </label>
               <label>
                 Attacke
@@ -226,24 +222,12 @@
                 </select>
               </label>
               <label>
-                Level
-                <input id="simLevelInput" type="number" min="1" max="100" value="50" />
-              </label>
-              <label>
-                Wetter
-                <select id="simWeatherSelect">
-                  <option value="none">Normal</option>
-                  <option value="sun">Sonne</option>
-                  <option value="rain">Regen</option>
-                </select>
+                Angreifer-Level
+                <input id="simAttackerLevelInput" type="number" min="1" max="100" value="50" />
               </label>
               <label>
                 Angreifer-Boost
                 <select id="simAttackStage"></select>
-              </label>
-              <label>
-                Ziel-Boost
-                <select id="simDefenseStage"></select>
               </label>
             </div>
             <div class="sim-toggle-row">
@@ -256,27 +240,53 @@
                 Angreifer verbrannt
               </label>
             </div>
-            <p class="sim-status" id="simStatus" aria-live="polite">Pokémon-Daten werden geladen ...</p>
+            <div class="sim-pokemon-card" id="simAttackerCard"></div>
           </article>
 
-          <article class="result-card simulator-result">
-            <p class="result-kicker">Schaden</p>
-            <div class="result-multiplier sim-damage-range" id="simDamageRange">--</div>
-            <p class="result-title" id="simDamageTitle">Wähle Angreifer, Attacke und Ziel.</p>
-            <div class="calculation-line" id="simDamageChips"></div>
-            <div class="explanation-box" id="simDamageBreakdown"></div>
+          <article class="panel sim-side-panel">
+            <div class="panel-head">
+              <h2>Ziel</h2>
+              <span class="panel-tag">Verteidigung</span>
+            </div>
+            <div class="sim-side-form">
+              <label>
+                Ziel-Pokémon
+                <input id="simDefenderInput" list="pokemonList" autocomplete="off" value="charizard" />
+              </label>
+              <label>
+                Ziel-Level
+                <input id="simDefenderLevelInput" type="number" min="1" max="100" value="50" />
+              </label>
+              <label>
+                Ziel-Boost
+                <select id="simDefenseStage"></select>
+              </label>
+              <label>
+                Wetter
+                <select id="simWeatherSelect">
+                  <option value="none">Normal</option>
+                  <option value="sun">Sonne</option>
+                  <option value="rain">Regen</option>
+                </select>
+              </label>
+            </div>
+            <div class="sim-pokemon-card" id="simDefenderCard"></div>
           </article>
         </div>
 
-        <div class="sim-pokemon-grid">
-          <article class="panel sim-pokemon-card" id="simAttackerCard"></article>
-          <article class="panel sim-pokemon-card" id="simDefenderCard"></article>
-        </div>
+        <article class="result-card simulator-result">
+          <p class="result-kicker">Schaden</p>
+          <div class="result-multiplier sim-damage-range" id="simDamageRange">--</div>
+          <p class="result-title" id="simDamageTitle">Wähle Angreifer, Attacke und Ziel.</p>
+          <div class="calculation-line" id="simDamageChips"></div>
+          <div class="explanation-box" id="simDamageBreakdown"></div>
+          <p class="sim-status" id="simStatus" aria-live="polite">Pokémon-Daten werden geladen ...</p>
+        </article>
       </section>
 
       <footer class="creator-credit">Erstellt von Jan</footer>
     </main>
 
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
   </body>
 </html>
