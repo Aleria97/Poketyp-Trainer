@@ -1,9 +1,9 @@
-const CACHE_NAME = "pokemon-typen-trainer-v4";
+const CACHE_NAME = "pokemon-typen-trainer-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./style.css?v=4",
-  "./app.js?v=4",
+  "./style.css?v=5",
+  "./app.js?v=5",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

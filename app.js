@@ -1086,7 +1086,8 @@ function finishAllMode() {
 
 function renderMatrix() {
   const table = $("#typeMatrix");
-  const head = `<thead><tr><th scope="col" class="matrix-corner">Angriff</th>${TYPES.map((type) => `<th scope="col">${type.name}</th>`).join("")}</tr></thead>`;
+  const columns = `<colgroup><col class="matrix-attack-col">${TYPES.map(() => `<col class="matrix-type-col">`).join("")}</colgroup>`;
+  const head = `<thead><tr><th scope="col" class="matrix-corner">Angriff</th>${TYPES.map((type) => `<th scope="col"><span class="matrix-col-label">${type.name}</span></th>`).join("")}</tr></thead>`;
   const body = TYPES.map((attackType) => {
     const cells = TYPES.map((defenseType) => {
       const value = baseEffectiveness(attackType.id, defenseType.id);
@@ -1095,7 +1096,7 @@ function renderMatrix() {
     }).join("");
     return `<tr><th scope="row">${attackType.name}</th>${cells}</tr>`;
   }).join("");
-  table.innerHTML = `${head}<tbody>${body}</tbody>`;
+  table.innerHTML = `${columns}${head}<tbody>${body}</tbody>`;
 }
 
 function bindTabs() {
