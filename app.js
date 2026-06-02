@@ -114,11 +114,18 @@ const multipliers = [0, 0.25, 0.5, 1, 2, 4];
 const themeStorageKey = "pokemon-type-trainer-theme";
 const roundQuestionCount = 50;
 let quizMode = "practice";
+let quizTargetMode = "mixed";
 let allQuestions = [];
 let allIndex = 0;
 let allResults = [];
 let currentQuestion = null;
 let score = { correct: 0, total: 0 };
+
+const targetModeLabels = {
+  mixed: "Gemischt",
+  single: "Einzeltyp",
+  double: "Doppeltyp",
+};
 
 function typeName(typeId) {
   return typeById[typeId]?.name ?? "Kein Typ";
@@ -789,14 +796,19 @@ function makeQuizQuestion(attackType, defenseTypes) {
   };
 }
 
-function defenseCombinations() {
-  const combinations = TYPES.map((type) => [type.id]);
+function defenseCombinations(targetMode = quizTargetMode) {
+  const singleTypes = TYPES.map((type) => [type.id]);
+  const doubleTypes = [];
+
   TYPES.forEach((firstType, firstIndex) => {
     TYPES.slice(firstIndex + 1).forEach((secondType) => {
-      combinations.push([firstType.id, secondType.id]);
+      doubleTypes.push([firstType.id, secondType.id]);
     });
   });
-  return combinations;
+
+  if (targetMode === "single") return singleTypes;
+  if (targetMode === "double") return doubleTypes;
+  return [...singleTypes, ...doubleTypes];
 }
 
 function buildAllQuestions() {
@@ -812,9 +824,7 @@ function buildAllQuestions() {
 
 function makePracticeQuestion() {
   const attackType = randomItem(TYPES).id;
-  const firstType = randomItem(TYPES).id;
-  const secondType = Math.random() > 0.42 ? randomItem(TYPES).id : "";
-  const defenseTypes = selectedDefenseTypes(firstType, secondType);
+  const defenseTypes = randomItem(defenseCombinations());
   return makeQuizQuestion(attackType, defenseTypes);
 }
 
@@ -896,13 +906,20 @@ function resetScore() {
 }
 
 function updateQuizProgress() {
+  const targetLabel = targetModeLabels[quizTargetMode];
   $("#quizProgress").textContent =
-    quizMode === "all" ? `Frage ${allIndex + 1} von ${roundQuestionCount}` : "Übungsmodus";
+    quizMode === "all" ? `Frage ${allIndex + 1} von ${roundQuestionCount} · ${targetLabel}` : `Übungsmodus · ${targetLabel}`;
 }
 
 function setModeButtons() {
   document.querySelectorAll(".mode-button").forEach((button) => {
     button.classList.toggle("active", button.dataset.quizMode === quizMode);
+  });
+}
+
+function setTargetModeButtons() {
+  document.querySelectorAll(".target-mode-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.targetMode === quizTargetMode);
   });
 }
 
@@ -913,6 +930,7 @@ function startPracticeMode() {
   allResults = [];
   resetScore();
   setModeButtons();
+  setTargetModeButtons();
   renderQuestion();
 }
 
@@ -923,12 +941,20 @@ function startAllMode() {
   allResults = [];
   resetScore();
   setModeButtons();
+  setTargetModeButtons();
   renderQuestion();
 }
 
 function setQuizMode(mode) {
   if (mode === quizMode) return;
   if (mode === "all") startAllMode();
+  else startPracticeMode();
+}
+
+function setQuizTargetMode(mode) {
+  if (mode === quizTargetMode) return;
+  quizTargetMode = mode;
+  if (quizMode === "all") startAllMode();
   else startPracticeMode();
 }
 
@@ -1098,6 +1124,9 @@ function bindInputs() {
   $("#restartAllButton").addEventListener("click", startAllMode);
   document.querySelectorAll(".mode-button").forEach((button) => {
     button.addEventListener("click", () => setQuizMode(button.dataset.quizMode));
+  });
+  document.querySelectorAll(".target-mode-button").forEach((button) => {
+    button.addEventListener("click", () => setQuizTargetMode(button.dataset.targetMode));
   });
   $("#themeToggle").addEventListener("click", toggleTheme);
 }

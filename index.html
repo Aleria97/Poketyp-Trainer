@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style.css?v=4" />
   </head>
   <body>
     <main class="app-shell">
@@ -139,6 +139,12 @@
             <button class="mode-button" type="button" data-quiz-mode="all">50 Fragen</button>
             <span class="quiz-progress" id="quizProgress">Übungsmodus</span>
           </div>
+          <div class="quiz-filter" aria-label="Zieltypen im Quiz">
+            <span class="quiz-filter-label">Zieltypen</span>
+            <button class="target-mode-button active" type="button" data-target-mode="mixed">Gemischt</button>
+            <button class="target-mode-button" type="button" data-target-mode="single">Einzeltyp</button>
+            <button class="target-mode-button" type="button" data-target-mode="double">Doppeltyp</button>
+          </div>
           <p class="quiz-question" id="quizQuestion"></p>
           <div class="quiz-target" id="quizTarget"></div>
           <div class="pokemon-example quiz-pokemon" id="quizPokemonExample" hidden></div>
@@ -190,6 +196,6 @@
       <footer class="creator-credit">Erstellt von Jan</footer>
     </main>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=4"></script>
   </body>
 </html>
