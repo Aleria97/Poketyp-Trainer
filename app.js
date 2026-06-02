@@ -1087,14 +1087,14 @@ function finishAllMode() {
 function renderMatrix() {
   const table = $("#typeMatrix");
   const columns = `<colgroup><col class="matrix-attack-col">${TYPES.map(() => `<col class="matrix-type-col">`).join("")}</colgroup>`;
-  const head = `<thead><tr><th scope="col" class="matrix-corner">Angriff</th>${TYPES.map((type) => `<th scope="col"><span class="matrix-col-label">${type.name}</span></th>`).join("")}</tr></thead>`;
+  const head = `<thead><tr><th scope="col" class="matrix-corner">Angriff</th>${TYPES.map((type) => `<th scope="col" class="matrix-type-heading" style="--type-color: ${type.color}"><span class="matrix-col-label">${type.name}</span></th>`).join("")}</tr></thead>`;
   const body = TYPES.map((attackType) => {
     const cells = TYPES.map((defenseType) => {
       const value = baseEffectiveness(attackType.id, defenseType.id);
       const className = `cell-${String(value).replace(".", "")}`;
       return `<td class="${className}">${value === 1 ? "" : formatMultiplier(value)}</td>`;
     }).join("");
-    return `<tr><th scope="row">${attackType.name}</th>${cells}</tr>`;
+    return `<tr><th scope="row" class="matrix-type-heading" style="--type-color: ${attackType.color}">${attackType.name}</th>${cells}</tr>`;
   }).join("");
   table.innerHTML = `${columns}${head}<tbody>${body}</tbody>`;
 }
