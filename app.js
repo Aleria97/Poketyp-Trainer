@@ -128,6 +128,7 @@ const targetModeLabels = {
 };
 
 const pokeApiBase = "https://pokeapi.co/api/v2";
+const pokemonListStorageKey = "pokemon-type-trainer-german-pokemon-list-v1";
 const pokemonCache = new Map();
 const speciesCache = new Map();
 const moveCache = new Map();
@@ -1154,9 +1155,58 @@ function setSimulatorStatus(message) {
   $("#simStatus").textContent = message;
 }
 
+function rememberPokemonListEntry(entry) {
+  pokemonNameLookup.set(normalizeApiName(entry.displayName), entry.name);
+  pokemonNameLookup.set(normalizeApiName(entry.name), entry.name);
+  pokemonNameLookup.set(String(entry.id), entry.name);
+}
+
+function readStoredPokemonList() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(pokemonListStorageKey) || "null");
+    if (!Array.isArray(stored) || !stored.length) return null;
+    stored.forEach(rememberPokemonListEntry);
+    return stored;
+  } catch {
+    return null;
+  }
+}
+
+function storePokemonList(list) {
+  try {
+    localStorage.setItem(pokemonListStorageKey, JSON.stringify(list));
+  } catch {
+    // Die Liste ist nur Komfort; ohne Speicher funktioniert die App trotzdem.
+  }
+}
+
 function loadPokemonList() {
   if (!pokemonListPromise) {
-    pokemonListPromise = fetchJson(`${pokeApiBase}/pokemon?limit=20000`).then((data) => data.results);
+    pokemonListPromise = (async () => {
+      const stored = readStoredPokemonList();
+      if (stored) return stored;
+
+      const data = await fetchJson(`${pokeApiBase}/pokemon-species?limit=20000`);
+      const entries = [];
+      const chunkSize = 24;
+      for (let index = 0; index < data.results.length; index += chunkSize) {
+        const chunk = data.results.slice(index, index + chunkSize);
+        const speciesList = await Promise.all(chunk.map((species) => loadSpecies(species).catch(() => null)));
+        speciesList.filter(Boolean).forEach((species) => {
+          entries.push({
+            id: species.id,
+            name: species.name,
+            displayName: localizedPokemonName(species),
+          });
+        });
+        setSimulatorStatus(`Deutsche Pokémon-Liste lädt ... ${Math.min(index + chunkSize, data.results.length)}/${data.results.length}`);
+      }
+
+      entries.sort((a, b) => a.displayName.localeCompare(b.displayName, "de"));
+      entries.forEach(rememberPokemonListEntry);
+      storePokemonList(entries);
+      return entries;
+    })();
   }
   return pokemonListPromise;
 }
@@ -1167,13 +1217,13 @@ async function populatePokemonList() {
   dataList.innerHTML = "";
   list.forEach((pokemon) => {
     const option = document.createElement("option");
-    option.value = pokemon.name;
-    option.label = prettyApiName(pokemon.name);
+    option.value = pokemon.displayName;
     dataList.append(option);
   });
   pokemonCache.forEach((pokemon) => {
     if (pokemon?.displayName) addGermanPokemonOption(pokemon);
   });
+  setSimulatorStatus("Deutsche Pokémon-Liste bereit.");
 }
 
 function addGermanPokemonOption(pokemon) {
@@ -1181,7 +1231,6 @@ function addGermanPokemonOption(pokemon) {
   if (!dataList || [...dataList.options].some((option) => option.value === pokemon.displayName)) return;
   const option = document.createElement("option");
   option.value = pokemon.displayName;
-  option.label = pokemon.name;
   dataList.prepend(option);
 }
 
