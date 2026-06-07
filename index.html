@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon-192.png" sizes="192x192" />
     <link rel="apple-touch-icon" href="icons/icon-192.png" />
-    <link rel="stylesheet" href="style.css?v=10" />
+    <link rel="stylesheet" href="style.css?v=11" />
   </head>
   <body>
     <main class="app-shell">
@@ -46,6 +46,7 @@
       <nav class="module-tabs" aria-label="Werkzeug auswählen">
         <button class="module-tab active" type="button" data-module="types">Typen lernen</button>
         <button class="module-tab" type="button" data-module="simulator">Attacken-Simulator</button>
+        <button class="module-tab" type="button" data-module="candy">EP-Bonbon-Rechner</button>
       </nav>
 
       <section class="module-view active" id="typesModule">
@@ -284,9 +285,92 @@
         </article>
       </section>
 
+      <section class="module-view" id="candyModule">
+        <div class="candy-layout">
+          <article class="panel candy-controls">
+            <div class="panel-head">
+              <h2>EP-Bonbons berechnen</h2>
+              <span class="panel-tag">Level 1-100</span>
+            </div>
+
+            <div class="candy-setup-grid">
+              <label>
+                Pokémon
+                <input id="candyPokemonInput" list="pokemonList" autocomplete="off" value="Pikachu" />
+              </label>
+              <label>
+                Aktuelles Level
+                <input id="candyCurrentLevel" type="number" min="1" max="100" value="1" />
+              </label>
+              <label>
+                EP seit Levelaufstieg
+                <input id="candyCurrentProgress" type="number" min="0" value="0" />
+              </label>
+              <label>
+                Wunschlevel
+                <input id="candyTargetLevel" type="number" min="1" max="100" value="50" />
+              </label>
+            </div>
+
+            <div class="candy-pokemon-card" id="candyPokemonCard"></div>
+
+            <div class="candy-heading">
+              <h3>Bonbons hinzufügen</h3>
+              <span id="candyAddedTotal">0 EP</span>
+            </div>
+            <div class="candy-grid">
+              <label class="candy-input candy-xs">
+                <span>EP-Bonbon XS <small>100 EP</small></span>
+                <input id="candyXs" type="number" min="0" step="1" value="0" />
+              </label>
+              <label class="candy-input candy-s">
+                <span>EP-Bonbon S <small>800 EP</small></span>
+                <input id="candyS" type="number" min="0" step="1" value="0" />
+              </label>
+              <label class="candy-input candy-m">
+                <span>EP-Bonbon M <small>3.000 EP</small></span>
+                <input id="candyM" type="number" min="0" step="1" value="0" />
+              </label>
+              <label class="candy-input candy-l">
+                <span>EP-Bonbon L <small>10.000 EP</small></span>
+                <input id="candyL" type="number" min="0" step="1" value="0" />
+              </label>
+              <label class="candy-input candy-xl">
+                <span>EP-Bonbon XL <small>30.000 EP</small></span>
+                <input id="candyXl" type="number" min="0" step="1" value="0" />
+              </label>
+            </div>
+          </article>
+
+          <article class="result-card candy-result">
+            <p class="result-kicker">Ergebnis</p>
+            <div class="result-multiplier candy-level" id="candyResultLevel">Lv. --</div>
+            <p class="result-title" id="candyResultTitle">Pokémon-Daten werden geladen ...</p>
+            <div class="level-progress" aria-label="Fortschritt bis zum nächsten Level">
+              <span id="candyProgressBar"></span>
+            </div>
+            <p class="candy-progress-copy" id="candyProgressCopy"></p>
+            <div class="calculation-line" id="candyResultChips"></div>
+
+            <div class="explanation-box candy-recommendation">
+              <div class="candy-recommendation-head">
+                <div>
+                  <p class="pokemon-kicker">Bis zum Wunschlevel</p>
+                  <h3 id="candyRecommendationTitle">Noch keine Berechnung</h3>
+                </div>
+                <span class="panel-tag" id="candyGrowthRate">Wachstumsrate</span>
+              </div>
+              <div class="recommendation-candies" id="candyRecommendation"></div>
+              <p class="candy-recommendation-note" id="candyRecommendationNote"></p>
+            </div>
+            <p class="sim-status" id="candyStatus" aria-live="polite">Pokémon-Daten werden geladen ...</p>
+          </article>
+        </div>
+      </section>
+
       <footer class="project-credit">PokéTyp - A NexVerse Project</footer>
     </main>
 
-    <script src="app.js?v=10"></script>
+    <script src="app.js?v=11"></script>
   </body>
 </html>

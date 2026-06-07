@@ -132,12 +132,34 @@ const pokemonListStorageKey = "pokemon-type-trainer-german-pokemon-list-v1";
 const pokemonCache = new Map();
 const speciesCache = new Map();
 const moveCache = new Map();
+const growthRateCache = new Map();
 const pokemonNameLookup = new Map();
 let pokemonListPromise = null;
 let simulatorState = {
   attacker: null,
   defender: null,
   move: null,
+};
+let candyState = {
+  pokemon: null,
+  growthRate: null,
+};
+
+const expCandyOptions = [
+  { key: "xl", label: "XL", value: 30000, selector: "#candyXl", className: "candy-xl" },
+  { key: "l", label: "L", value: 10000, selector: "#candyL", className: "candy-l" },
+  { key: "m", label: "M", value: 3000, selector: "#candyM", className: "candy-m" },
+  { key: "s", label: "S", value: 800, selector: "#candyS", className: "candy-s" },
+  { key: "xs", label: "XS", value: 100, selector: "#candyXs", className: "candy-xs" },
+];
+
+const growthRateLabels = {
+  slow: "Langsam",
+  medium: "Mittel-schnell",
+  fast: "Schnell",
+  "medium-slow": "Mittel-langsam",
+  "slow-then-very-fast": "Erratisch",
+  "fast-then-very-slow": "Schwankend",
 };
 
 const statLabels = {
@@ -1269,6 +1291,8 @@ function normalizePokemon(data, species) {
     stats,
     types,
     sprite,
+    growthRateUrl: species.growth_rate?.url,
+    growthRateName: species.growth_rate?.name,
     moves: data.moves.map((entry) => entry.move.name).sort((a, b) => prettyApiName(a).localeCompare(prettyApiName(b), "de")),
   };
 }
@@ -1636,6 +1660,280 @@ async function loadSimulatorMove() {
   }
 }
 
+function formatExperience(value) {
+  return `${Math.max(0, Math.round(value)).toLocaleString("de-DE")} EP`;
+}
+
+function readWholeNumber(selector, fallback = 0) {
+  const input = $(selector);
+  const parsed = Number(input.value);
+  const value = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+  input.value = String(value);
+  return value;
+}
+
+function readCandyLevel(selector, fallback) {
+  const input = $(selector);
+  const parsed = Number(input.value);
+  const level = Number.isFinite(parsed) ? Math.max(1, Math.min(100, Math.round(parsed))) : fallback;
+  input.value = String(level);
+  return level;
+}
+
+async function loadGrowthRate(url) {
+  if (!url) throw new Error("Keine Wachstumsrate gefunden");
+  if (growthRateCache.has(url)) return growthRateCache.get(url);
+
+  const data = await fetchJson(url);
+  const levels = [...data.levels].sort((a, b) => a.level - b.level);
+  const growthRate = {
+    name: data.name,
+    levels,
+    experienceByLevel: Object.fromEntries(levels.map((entry) => [entry.level, entry.experience])),
+  };
+  growthRateCache.set(url, growthRate);
+  return growthRate;
+}
+
+function experienceAtLevel(growthRate, level) {
+  return growthRate.experienceByLevel[level] ?? 0;
+}
+
+function levelAtExperience(growthRate, experience) {
+  let low = 0;
+  let high = growthRate.levels.length - 1;
+  let result = growthRate.levels[0].level;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const entry = growthRate.levels[middle];
+    if (entry.experience <= experience) {
+      result = entry.level;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  return result;
+}
+
+function readCandyCounts() {
+  return Object.fromEntries(
+    expCandyOptions.map((option) => [option.key, readWholeNumber(option.selector)]),
+  );
+}
+
+function totalCandyExperience(counts) {
+  return expCandyOptions.reduce((total, option) => total + counts[option.key] * option.value, 0);
+}
+
+function recommendCandyMix(requiredExperience) {
+  const targetUnits = Math.ceil(Math.max(0, requiredExperience) / 100);
+  const options = expCandyOptions.map((option) => ({
+    ...option,
+    units: option.value / 100,
+  }));
+  const best = Array(targetUnits + 1).fill(Infinity);
+  const previous = Array(targetUnits + 1).fill(null);
+  best[0] = 0;
+
+  for (let amount = 1; amount <= targetUnits; amount += 1) {
+    options.forEach((option) => {
+      if (amount < option.units) return;
+      const candidate = best[amount - option.units] + 1;
+      if (candidate < best[amount]) {
+        best[amount] = candidate;
+        previous[amount] = option;
+      }
+    });
+  }
+
+  const counts = Object.fromEntries(options.map((option) => [option.key, 0]));
+  let remaining = targetUnits;
+  while (remaining > 0) {
+    const option = previous[remaining];
+    if (!option) break;
+    counts[option.key] += 1;
+    remaining -= option.units;
+  }
+
+  const totalExperience = targetUnits * 100;
+  return {
+    counts,
+    totalExperience,
+    excess: Math.max(0, totalExperience - requiredExperience),
+    candyCount: Object.values(counts).reduce((total, count) => total + count, 0),
+  };
+}
+
+function renderCandyPokemonCard(pokemon, growthRate) {
+  const container = $("#candyPokemonCard");
+  container.innerHTML = "";
+  if (!pokemon || !growthRate) return;
+
+  const art = document.createElement("div");
+  art.className = "sim-pokemon-art";
+  if (pokemon.sprite) {
+    const image = document.createElement("img");
+    image.src = pokemon.sprite;
+    image.alt = pokemon.displayName;
+    art.append(image);
+  } else {
+    art.textContent = "?";
+  }
+
+  const copy = document.createElement("div");
+  copy.className = "sim-pokemon-copy";
+  const kicker = document.createElement("p");
+  kicker.className = "pokemon-kicker";
+  kicker.textContent = `Wachstum: ${growthRateLabels[growthRate.name] || prettyApiName(growthRate.name)}`;
+  const name = document.createElement("p");
+  name.className = "sim-pokemon-name";
+  name.textContent = pokemon.displayName;
+  const types = document.createElement("div");
+  types.className = "pokemon-types";
+  pokemon.types.forEach((type) => types.append(chip(type)));
+  copy.append(kicker, name, types);
+  container.append(art, copy);
+}
+
+function renderRecommendedCandies(recommendation) {
+  const container = $("#candyRecommendation");
+  container.innerHTML = "";
+  expCandyOptions.forEach((option) => {
+    const item = document.createElement("div");
+    item.className = `recommended-candy ${option.className}`;
+    const amount = document.createElement("strong");
+    amount.textContent = `x${recommendation.counts[option.key]}`;
+    item.append(amount, document.createTextNode(`Bonbon ${option.label}`));
+    container.append(item);
+  });
+}
+
+function clearCandyResult(message = "Wähle ein Pokémon aus.") {
+  $("#candyResultLevel").textContent = "Lv. --";
+  $("#candyResultTitle").textContent = message;
+  $("#candyProgressBar").style.width = "0%";
+  $("#candyProgressCopy").textContent = "";
+  $("#candyResultChips").innerHTML = "";
+  $("#candyRecommendationTitle").textContent = "Noch keine Berechnung";
+  $("#candyRecommendation").innerHTML = "";
+  $("#candyRecommendationNote").textContent = "";
+  $("#candyGrowthRate").textContent = "Wachstumsrate";
+}
+
+function updateCandyCalculator() {
+  const { pokemon, growthRate } = candyState;
+  if (!pokemon || !growthRate) return;
+
+  const currentLevel = readCandyLevel("#candyCurrentLevel", 1);
+  const targetLevel = readCandyLevel("#candyTargetLevel", 50);
+  const currentLevelExperience = experienceAtLevel(growthRate, currentLevel);
+  const nextLevelExperience =
+    currentLevel < 100 ? experienceAtLevel(growthRate, currentLevel + 1) : currentLevelExperience;
+  const progressLimit = currentLevel < 100 ? Math.max(0, nextLevelExperience - currentLevelExperience - 1) : 0;
+  const progressInput = $("#candyCurrentProgress");
+  progressInput.max = String(progressLimit);
+  progressInput.disabled = currentLevel === 100;
+  const requestedProgress = readWholeNumber("#candyCurrentProgress");
+  const currentProgress = Math.min(requestedProgress, progressLimit);
+  progressInput.value = String(currentProgress);
+
+  const startingExperience = currentLevelExperience + currentProgress;
+  const counts = readCandyCounts();
+  const addedExperience = totalCandyExperience(counts);
+  const maximumExperience = experienceAtLevel(growthRate, 100);
+  const uncappedExperience = startingExperience + addedExperience;
+  const finalExperience = Math.min(uncappedExperience, maximumExperience);
+  const wastedExperience = Math.max(0, uncappedExperience - maximumExperience);
+  const finalLevel = levelAtExperience(growthRate, finalExperience);
+  const finalLevelExperience = experienceAtLevel(growthRate, finalLevel);
+  const followingLevelExperience =
+    finalLevel < 100 ? experienceAtLevel(growthRate, finalLevel + 1) : maximumExperience;
+  const experienceIntoLevel = finalExperience - finalLevelExperience;
+  const levelSpan = Math.max(1, followingLevelExperience - finalLevelExperience);
+  const progressPercent = finalLevel === 100 ? 100 : (experienceIntoLevel / levelSpan) * 100;
+  const gainedLevels = finalLevel - currentLevel;
+
+  $("#candyAddedTotal").textContent = formatExperience(addedExperience);
+  $("#candyResultLevel").textContent = `Lv. ${finalLevel}`;
+  $("#candyResultTitle").textContent =
+    gainedLevels > 0
+      ? `${pokemon.displayName} steigt um ${gainedLevels} ${gainedLevels === 1 ? "Level" : "Level"}.`
+      : `${pokemon.displayName} bleibt auf Level ${finalLevel}.`;
+  $("#candyProgressBar").style.width = `${Math.max(0, Math.min(100, progressPercent))}%`;
+  $("#candyProgressCopy").textContent =
+    finalLevel === 100
+      ? `Maximallevel erreicht · insgesamt ${formatExperience(finalExperience)}`
+      : `${formatExperience(experienceIntoLevel)} von ${formatExperience(levelSpan)} im Level · noch ${formatExperience(followingLevelExperience - finalExperience)} bis Level ${finalLevel + 1}`;
+
+  const chips = $("#candyResultChips");
+  chips.innerHTML = "";
+  chips.append(labelChip("Bonbon-EP", formatExperience(addedExperience)));
+  chips.append(labelChip("Gesamt", formatExperience(finalExperience)));
+  if (wastedExperience > 0) chips.append(labelChip("Überschuss", formatExperience(wastedExperience)));
+
+  const targetExperience = experienceAtLevel(growthRate, targetLevel);
+  const requiredExperience = Math.max(0, targetExperience - startingExperience);
+  $("#candyGrowthRate").textContent = growthRateLabels[growthRate.name] || prettyApiName(growthRate.name);
+
+  if (requiredExperience === 0) {
+    $("#candyRecommendationTitle").textContent = `Level ${targetLevel} ist bereits erreicht`;
+    renderRecommendedCandies({ counts: Object.fromEntries(expCandyOptions.map((option) => [option.key, 0])) });
+    $("#candyRecommendationNote").textContent = `Ausgangslage: Level ${currentLevel} mit ${formatExperience(currentProgress)} Fortschritt.`;
+  } else {
+    const recommendation = recommendCandyMix(requiredExperience);
+    $("#candyRecommendationTitle").textContent = `${formatExperience(requiredExperience)} bis Level ${targetLevel}`;
+    renderRecommendedCandies(recommendation);
+    $("#candyRecommendationNote").textContent =
+      `${recommendation.candyCount} Bonbons geben ${formatExperience(recommendation.totalExperience)}. ` +
+      `${recommendation.excess > 0 ? `${formatExperience(recommendation.excess)} liegen über dem benötigten Wert.` : "Die EP-Menge passt genau."} ` +
+      "Berechnet ab der aktuellen Ausgangslage.";
+  }
+
+  $("#candyStatus").textContent = "Bereit.";
+}
+
+async function loadCandyPokemon() {
+  const value = $("#candyPokemonInput").value;
+  if (!value.trim()) return;
+
+  try {
+    $("#candyStatus").textContent = "Pokémon und Wachstumsrate werden geladen ...";
+    const pokemon = await loadPokemon(value);
+    const growthRate = await loadGrowthRate(pokemon.growthRateUrl);
+    candyState = { pokemon, growthRate };
+    $("#candyPokemonInput").value = pokemon.displayName;
+    renderCandyPokemonCard(pokemon, growthRate);
+    updateCandyCalculator();
+  } catch {
+    candyState = { pokemon: null, growthRate: null };
+    $("#candyPokemonCard").innerHTML = "";
+    clearCandyResult("Pokémon konnte nicht geladen werden.");
+    $("#candyStatus").textContent = "Pokémon nicht gefunden oder PokéAPI gerade nicht erreichbar.";
+  }
+}
+
+function bindCandyInputs() {
+  $("#candyPokemonInput").addEventListener("change", loadCandyPokemon);
+  [
+    "#candyCurrentLevel",
+    "#candyCurrentProgress",
+    "#candyTargetLevel",
+    ...expCandyOptions.map((option) => option.selector),
+  ].forEach((selector) => {
+    $(selector).addEventListener("input", updateCandyCalculator);
+    $(selector).addEventListener("change", updateCandyCalculator);
+  });
+}
+
+async function initCandyCalculator() {
+  bindCandyInputs();
+  clearCandyResult("Pokémon-Daten werden geladen ...");
+  await loadCandyPokemon();
+}
+
 function bindModuleTabs() {
   document.querySelectorAll(".module-tab").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1725,6 +2023,7 @@ function init() {
   renderQuestion();
   renderMatrix();
   initSimulator();
+  initCandyCalculator();
 }
 
 function registerServiceWorker() {
